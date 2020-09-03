@@ -87,7 +87,7 @@ def update_merged_branches(repo_path: str) -> None:
 
     commits = [c for c in repo.iter_commits(merges=True)]
     messages = [c.message.split("\n")[0] for c in commits]
-    branches = [(m.split("pmelchior/")[1]) for m in messages if "pmelchior" in m]
+    branches = [(m.split("pmelchior/")[1]) for m in messages if "pmelchior" in m][::-1]
     table = aws.get_table("scarlet_merged")
     with table.batch_writer() as batch:
         for idx, branch in enumerate(branches):
