@@ -16,7 +16,7 @@ f.close()
 
 
 setup(
-    name="scarlet_extensions-fred3m",
+    name="scarlet_extensions",
     author="Fred Moolekamp",
     author_email="fred.moolekamp@gmail.com",
     description="Additional functionality to extend scarlet",
