@@ -24,6 +24,26 @@ class Data:
     def images(self, images):
         self._images = images
 
+def convert_coordinates(coord, origin, target):
+    """Converts coordinates from one reference frame to another
+    Parameters
+    ----------
+    coord: `tuple`
+        pixel coordinates in the frame of the `origin`
+    origin: `~scarlet.Frame`
+        origin frame
+    target: `~scarlet.Frame`
+        target frame
+    Returns
+    -------
+    coord_target: `tuple`
+        coordinates at the location of `coord` in the target frame
+    """
+    pix = np.stack(coord, axis=1)
+    ra_dec = origin.get_sky_coord(pix)
+    yx = target.get_pixel(ra_dec)
+    return yx[:, 0], yx[:, 1]
+
 def interpolate(data_lr, data_hr):
     ''' Interpolate low resolution data to high resolution
 
@@ -44,7 +64,7 @@ def interpolate(data_lr, data_hr):
 
     coord_lr0 = (np.arange(data_lr.images.shape[1]), np.arange(data_lr.images.shape[1]))
     coord_hr = (np.arange(data_hr.images.shape[1]), np.arange(data_hr.images.shape[1]))
-    coord_lr = scarlet.resampling.convert_coordinates(coord_lr0, frame_lr, frame_hr)
+    coord_lr = convert_coordinates(coord_lr0, frame_lr, frame_hr)
 
     interp = []
     for image in data_lr.images:

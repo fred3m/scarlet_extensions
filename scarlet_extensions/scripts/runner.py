@@ -1,8 +1,7 @@
 import numpy as np
 import scarlet.display
-from scarlet.initialization import build_initialization_coadd
 from ..initialization.detection import makeCatalog
-
+from scarlet.initialization import set_spectra_to_match
 
 class Runner:
     """ Class that lets scarlet run on a set of `Data` objects
@@ -28,30 +27,45 @@ class Runner:
 
         if len(self._data) == 1:
             weight = np.ones_like(self._data[0].images) / (self.bg_rms ** 2)[:, None, None]
-            observations = [scarlet.Observation(self._data[0].images,
+            observation = scarlet.Observation(self._data[0].images,
                                                     wcs=self._data[0].wcs,
-                                                    psfs=self._data[0].psfs,
+                                                    psf=self._data[0].psfs,
                                                     channels=self._data[0].channels,
-                                                    weights=weight)]
+                                                    weights=weight)
+
+            self.frame = scarlet.Frame(
+                self._data[0].images.shape,
+                psf=model_psf,
+                wcs = self._data[0].wcs,
+                channels=self._data[0].channels)
+
+            self._observations = [observation.match(self.frame)]
+            #A tag to keep track of the kind of computation
+            self.resolution = 'single'
+
         else:
             observations = []
             for i,bg in enumerate(self.bg_rms):
                 weight = np.ones_like(self._data[i].images) / (bg**2)[:,None,None]
-                observations.append(scarlet.Observation(self._data[i].images,
+                observations.append(scarlet.Observation(
+                                                    self._data[i].images,
                                                     wcs=self._data[i].wcs,
-                                                    psfs=self._data[i].psfs,
+                                                    psf=self._data[i].psfs,
                                                     channels=self._data[i].channels,
                                                     weights=weight))
-        self.observations = observations
-        self.frame = scarlet.Frame.from_observations(self.observations, model_psf, coverage = 'intersection')
+            self.frame = scarlet.Frame.from_observations(observations, model_psf, coverage='intersection')
+            self._observations = observations
+            self.resolution = 'multi'
         # Convert the HST coordinates to the HSC WCS
-        loc = [type(o) is not scarlet.LowResObservation for o in self.observations]
-        if ra_dec is None:
-            self.ra_dec = self.observations[np.where(loc)[0][0]].frame.get_sky_coord(self.pixel_coords)
+        if (ra_dec is None):
+            loc = [type(o) is not scarlet.Observation.renderer for o in self.renderer.ResolutionRenderer]
+            self.ra_dec = self._observations[np.where(loc)[0][0]].frame.get_sky_coord(self.pixel_coords)
         else:
             self.ra_dec = ra_dec
 
-    def run(self, it = 200, e_rel = 1.e-6, plot = False):
+
+
+    def run(self, it = 200, e_rel = 1.e-6, plot = False, norms = None):
         """ Run scarlet on the Runner object
 
         parameters
@@ -65,18 +79,19 @@ class Runner:
         """
         self.blend = scarlet.Blend(self.sources, self.observations)
         self.blend.fit(it, e_rel=e_rel)
-        print("scarlet ran for {0} iterations to logL = {1}".format(len(self.blend.loss), -self.blend.loss[-1]))
+
+        #print("scarlet ran for {0} iterations to logL = {1}".format(len(self.blend.loss), -self.blend.loss[-1]))
         if plot:
-            from scarlet.display import AsinhMapping
-            norm_hsc = AsinhMapping(minimum=-1, stretch=5, Q=1)
-            norm_hst = AsinhMapping(minimum=-1, stretch=10, Q=1)
-            norms = [norm_hsc, norm_hst]
+            import matplotlib.pyplot as plt
+            plt.plot(np.log10(np.array(np.abs(self.blend.loss))))
+            plt.xlabel('Iteration')
+            plt.ylabel('log-Likelihood')
             import matplotlib.pyplot as plt
             for i in range(len(self.observations)):
                 scarlet.display.show_scene(self.sources,
-                                       norm=norms[i],
+                                       norm=norms,
                                        observation=self.observations[i],
-                                       show_model=False,
+                                       show_model=True,
                                        show_rendered=True,
                                        show_observed=True,
                                        show_residual=True,
@@ -94,18 +109,22 @@ class Runner:
         if ra_dec is not None:
             self.ra_dec = ra_dec
         # Building a detection coadd
-        coadd, bg_cutoff = build_initialization_coadd(self.observations, filtered_coadd=True)
-
 
         # Source initialisation
         sources = []
         for i, sky in enumerate(self.ra_dec):
             if ks[i] == 'point':
                 sources.append(
-                    scarlet.PointSource(self.frame, sky, self.observations))
+                    scarlet.PointSource(self.frame, sky, self._observations))
+
             else:
-                sources.append(
-                    scarlet.ExtendedSource(self.frame, sky, self.observations, coadd=coadd, coadd_rms=bg_cutoff))
+                if len(self.observations) > 1:
+                    sources.append(
+                        scarlet.ExtendedSource(self.frame, sky, self._observations, thresh = 0.01))
+                else:
+                    sources.append(
+                        scarlet.ExtendedSource(self.frame, sky, self._observations, thresh = 0.01))
+        set_spectra_to_match(sources, self.observations)
         self.sources = sources
 
     def run_detection(self, lvl = 3, wavelet = True):
@@ -139,7 +158,23 @@ class Runner:
     def data(self, data):
         self._data = data
         self.run_detection(self.lvl, self.wavelet)
+        new_obs = []
         for i,obs in enumerate(self.observations):
             obs.images = self._data[i].images
-        loc = [type(o) is not scarlet.LowResObservation for o in self.observations]
-        self.ra_dec = self.observations[np.where(loc)[0][0]].frame.get_sky_coord(self.pixel_coords)
+            if len(self._observations) ==1:
+                obs.weights = np.ones_like(self._data[i].images) / (self.bg_rms ** 2)[:, None, None]
+            else:
+                obs.weights = np.ones_like(self._data[i].images) / (self.bg_rms[i] ** 2)[:, None, None]
+            new_obs.append(obs)
+        loc = [type(o.renderer) is not scarlet.renderer.ResolutionRenderer for o in self._observations]
+        self.ra_dec = self._observations[np.where(loc)[0][0]].get_sky_coord(self.pixel_coords)
+        self.observations = new_obs
+
+
+    @property
+    def observations(self):
+        return self._observations
+
+    @observations.setter
+    def observations(self, observations):
+        self._observations = observations
