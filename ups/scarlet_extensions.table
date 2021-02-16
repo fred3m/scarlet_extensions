@@ -1,0 +1,4 @@
+
+setupRequired(scarlet)
+
+envPrepend(PYTHONPATH, ${PRODUCT_DIR}/lib/python)

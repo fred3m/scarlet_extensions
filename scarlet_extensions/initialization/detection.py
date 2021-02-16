@@ -1,7 +1,7 @@
-import sep
 import numpy as np
 import scarlet
 from scarlet.wavelet import mad_wavelet, Starlet
+
 
 # Class to provide compact input of instrument data and metadata
 class Data:
@@ -23,6 +23,7 @@ class Data:
     @images.setter
     def images(self, images):
         self._images = images
+
 
 def interpolate(data_lr, data_hr):
     ''' Interpolate low resolution data to high resolution
@@ -74,6 +75,9 @@ def makeCatalog(datas, lvl=3, wave=True):
     bg_rms: array
         background level for each data set
     '''
+    # Import sep here so that it is not a required dependency
+    import sep
+
     if len(datas) == 1:
         hr_images = datas[0].images / np.sum(datas[0].images, axis=(1, 2))[:, None, None]
         # Detection image as the sum over all images
@@ -117,4 +121,3 @@ def makeCatalog(datas, lvl=3, wave=True):
             bg_rms.append(mad_wavelet(data.images))
 
     return catalog, bg_rms
-
