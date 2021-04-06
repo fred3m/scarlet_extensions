@@ -1,6 +1,7 @@
 import numpy as np
 import scarlet.display
 from ..initialization.detection import makeCatalog
+from ..initialization.initialisation import ParametricInit
 from scarlet.initialization import set_spectra_to_match
 
 class Runner:
@@ -28,16 +29,15 @@ class Runner:
         if len(self._data) == 1:
             weight = np.ones_like(self._data[0].images) / (self.bg_rms ** 2)[:, None, None]
             observation = scarlet.Observation(self._data[0].images,
-                                                    wcs=self._data[0].wcs,
-                                                    psf=self._data[0].psfs,
-                                                    channels=self._data[0].channels,
-                                                    weights=weight)
+                                              wcs=self._data[0].wcs,
+                                              psf=self._data[0].psfs,
+                                              channels=self._data[0].channels,
+                                              weights=weight)
 
-            self.frame = scarlet.Frame(
-                self._data[0].images.shape,
-                psf=model_psf,
-                wcs = self._data[0].wcs,
-                channels=self._data[0].channels)
+            self.frame = scarlet.Frame(self._data[0].images.shape,
+                                       psf=model_psf,
+                                       wcs = self._data[0].wcs,
+                                       channels=self._data[0].channels)
 
             self._observations = [observation.match(self.frame)]
             #A tag to keep track of the kind of computation
@@ -47,12 +47,11 @@ class Runner:
             observations = []
             for i,bg in enumerate(self.bg_rms):
                 weight = np.ones_like(self._data[i].images) / (bg**2)[:,None,None]
-                observations.append(scarlet.Observation(
-                                                    self._data[i].images,
-                                                    wcs=self._data[i].wcs,
-                                                    psf=self._data[i].psfs,
-                                                    channels=self._data[i].channels,
-                                                    weights=weight))
+                observations.append(scarlet.Observation(self._data[i].images,
+                                                        wcs=self._data[i].wcs,
+                                                        psf=self._data[i].psfs,
+                                                        channels=self._data[i].channels,
+                                                        weights=weight))
             self.frame = scarlet.Frame.from_observations(observations, model_psf, coverage='intersection')
             self._observations = observations
             self.resolution = 'multi'
@@ -99,12 +98,15 @@ class Runner:
                                        )
             plt.show()
 
-    def initialize_sources(self, ks, ra_dec = None):
+
+    def initialize_sources(self, ks, ra_dec = None, morph = None):
         '''
         Initialize all sources as Extended sources
         ks: array
             array of sources for the scene. For elements of ks that are numbers, the source id an extended source.
             If an element of ks is set to 'point', it corresponds to a point source.
+        morph: array
+            a morphology for each galaxy (not for point sources) to initialize scarlet sources with.
         '''
         if ra_dec is not None:
             self.ra_dec = ra_dec
@@ -118,12 +120,13 @@ class Runner:
                     scarlet.PointSource(self.frame, sky, self._observations))
 
             else:
-                if len(self.observations) > 1:
+                if morph == None:
                     sources.append(
                         scarlet.ExtendedSource(self.frame, sky, self._observations, thresh = 0.01))
                 else:
                     sources.append(
-                        scarlet.ExtendedSource(self.frame, sky, self._observations, thresh = 0.01))
+                        ParametricInit(self.frame, sky, self._observations, morph[i], thresh=0.01))
+
         set_spectra_to_match(sources, self.observations)
         self.sources = sources
 
@@ -157,18 +160,18 @@ class Runner:
     @data.setter
     def data(self, data):
         self._data = data
+
         self.run_detection(self.lvl, self.wavelet)
-        new_obs = []
         for i,obs in enumerate(self.observations):
-            obs.images = self._data[i].images
+            obs.data = self._data[i].images
             if len(self._observations) ==1:
                 obs.weights = np.ones_like(self._data[i].images) / (self.bg_rms ** 2)[:, None, None]
             else:
                 obs.weights = np.ones_like(self._data[i].images) / (self.bg_rms[i] ** 2)[:, None, None]
-            new_obs.append(obs)
+
         loc = [type(o.renderer) is not scarlet.renderer.ResolutionRenderer for o in self._observations]
         self.ra_dec = self._observations[np.where(loc)[0][0]].get_sky_coord(self.pixel_coords)
-        self.observations = new_obs
+
 
 
     @property
