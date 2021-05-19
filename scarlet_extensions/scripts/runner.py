@@ -24,7 +24,7 @@ class Runner:
     def __init__(self, data, model_psf, ra_dec = None):
 
         self._data = data
-        self.run_detection(lvl = 3, wavelet = True)
+        self.run_detection(lvl =1, wavelet = True)
 
         if len(self._data) == 1:
             weight = np.ones_like(self._data[0].images) / (self.bg_rms ** 2)[:, None, None]
@@ -57,8 +57,8 @@ class Runner:
             self.resolution = 'multi'
         # Convert the HST coordinates to the HSC WCS
         if (ra_dec is None):
-            loc = [type(o) is not scarlet.Observation.renderer for o in self.renderer.ResolutionRenderer]
-            self.ra_dec = self._observations[np.where(loc)[0][0]].frame.get_sky_coord(self.pixel_coords)
+            loc = [type(o) is not scarlet.renderer.ConvolutionRenderer for o in self._observations]
+            self.ra_dec = self._observations[np.where(loc)[0][0]].get_sky_coord(self.pixel_coords)
         else:
             self.ra_dec = ra_dec
 
@@ -122,15 +122,15 @@ class Runner:
             else:
                 if morph == None:
                     sources.append(
-                        scarlet.ExtendedSource(self.frame, sky, self._observations, thresh = 0.01))
+                        scarlet.ExtendedSource(self.frame, sky, self._observations))
                 else:
                     sources.append(
-                        ParametricInit(self.frame, sky, self._observations, morph[i], thresh=0.01))
+                        ParametricInit(self.frame, sky, self._observations, morph[i]))
 
         set_spectra_to_match(sources, self.observations)
         self.sources = sources
 
-    def run_detection(self, lvl = 3, wavelet = True):
+    def run_detection(self, lvl = 1, wavelet = True):
         ''' Runs the detection algorithms on data
 
         Parameters
