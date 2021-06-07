@@ -72,69 +72,43 @@ def interpolate(data_lr, data_hr):
     return np.array(interp)
 
 
-def makeCatalog(datas, lvl=3, wave=True):
-    ''' Creates a detection catalog by combining low and high resolution data
-
-    This function is used for detection before running scarlet.
-    It is particularly useful for stellar crowded fields and for detecting high frequency features.
-
-    Parameters
-    ----------
-    datas: array
-        array of Data objects
-    lvl: int
-        detection lvl
-    wave: Bool
-        set to True to use wavelet decomposition of images before combination
-
-    Returns
-    -------
-    catalog: sextractor catalog
-        catalog of detected sources
-    bg_rms: array
-        background level for each data set
-    '''
-    if len(datas) == 1:
-        hr_images = datas[0].images / np.sum(datas[0].images, axis=(1, 2))[:, None, None]
-        # Detection image as the sum over all images
-        detect_image = np.sum(hr_images, axis=0)
-    else:
+def makeCatalog(datas, lvl=3, thresh=3, wave=True):
+    # Create a catalog of detected source by running SEP on the wavelet transform
+    # of the sum of the high resolution images and the low resolution images interpolated to the high resolution grid
+    # Interpolate LR to HR
+    if len(datas)==2:
         data_lr, data_hr = datas
-        # Create observations for each image
-        # Interpolate low resolution to high resolution
         interp = interpolate(data_lr, data_hr)
-        # Normalisation of the interpolate low res images
+        # Normalisation
         interp = interp / np.sum(interp, axis=(1, 2))[:, None, None]
-        # Normalisation of the high res data
         hr_images = data_hr.images / np.sum(data_hr.images, axis=(1, 2))[:, None, None]
-        # Detection image as the sum over all images
+        # Summation to create a detection image
         detect_image = np.sum(interp, axis=0) + np.sum(hr_images, axis=0)
-        detect_image *= np.sum(data_hr.images)
-    if np.size(detect_image.shape) == 3:
-        if wave:
-            # Wavelet detection in the first three levels
-            wave_detect = Starlet(detect_image.mean(axis=0), lvl=4).coefficients
-            wave_detect[:, -1, :, :] = 0
-            detect = Starlet(coefficients=wave_detect).image
-        else:
-            # Direct detection
-            detect = detect_image.mean(axis=0)
+
+    elif len(datas) == 1:
+        norm = datas[0].images / np.sum(datas[0].images, axis=(1, 2))[:, None, None]
+        detect_image = np.sum(norm, axis = 0)
     else:
-        if wave:
-            wave_detect = Starlet(detect_image).coefficients
-            detect = wave_detect[0][0]
-        else:
-            detect = detect_image
+        "This is a mistake"
+    # Rescaling to HR image flux
+    # detect_image *= np.sum(data_hr.images)
+    # Wavelet transform
+    wave_detect = scarlet.Starlet(detect_image, direct=False).coefficients[0]
 
+    if wave:
+        # Creates detection from the first 3 wavelet levels
+        detect = wave_detect[:lvl, :, :].sum(axis=0)
+    else:
+        detect = detect_image
+    # Runs SEP detection
     bkg = sep.Background(detect)
-    catalog = sep.extract(detect, lvl, err=bkg.globalrms)
+    catalog = sep.extract(detect, thresh, err=bkg.globalrms)
 
-    if len(datas) ==1:
+    if len(datas) == 1:
         bg_rms = mad_wavelet(datas[0].images)
     else:
         bg_rms = []
         for data in datas:
             bg_rms.append(mad_wavelet(data.images))
 
-    return catalog, bg_rms
-
+    return catalog, np.array(bg_rms)
