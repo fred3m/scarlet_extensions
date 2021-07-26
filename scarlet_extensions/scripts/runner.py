@@ -36,7 +36,7 @@ class Runner:
 
             self.frame = scarlet.Frame(self._data[0].images.shape,
                                        psf=model_psf,
-                                       wcs = self._data[0].wcs,
+                                       wcs=self._data[0].wcs,
                                        channels=self._data[0].channels)
 
             self._observations = [observation.match(self.frame)]
@@ -52,7 +52,9 @@ class Runner:
                                                         psf=self._data[i].psfs,
                                                         channels=self._data[i].channels,
                                                         weights=weight))
-            self.frame = scarlet.Frame.from_observations(observations, model_psf, coverage='intersection')
+            self.frame = scarlet.Frame.from_observations(observations,
+                                                         model_psf,
+                                                         coverage='intersection')
             self._observations = observations
             self.resolution = 'multi'
         # Convert the HST coordinates to the HSC WCS
@@ -122,10 +124,10 @@ class Runner:
             else:
                 if morph == None:
                     sources.append(
-                        scarlet.ExtendedSource(self.frame, sky, self._observations))
+                        scarlet.ExtendedSource(self.frame, sky, self._observations, shifting=False))
                 else:
                     sources.append(
-                        ParametricInit(self.frame, sky, self._observations, morph[i]))
+                        ParametricInit(self.frame, sky, self._observations, morph[i], shifting=False))
 
         set_spectra_to_match(sources, self.observations)
         self.sources = sources
