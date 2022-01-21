@@ -1,7 +1,22 @@
 import sep
 import numpy as np
 import scarlet
-from scarlet.wavelet import mad_wavelet, Starlet
+from scarlet.wavelet import Starlet
+
+def mad_wavelet(image):
+    """ image: Median absolute deviation of the first wavelet scale.
+    (WARNING: sorry to disapoint, this is not a wavelet for mad scientists)
+    Parameters
+    ----------
+    image: array
+        An image or cube of images
+    Returns
+    -------
+    mad: array
+        median absolute deviation each image in the cube
+    """
+    sigma = mad(Starlet(image, lvl = 2).coefficients[:,0,...], axis = (-2,-1))
+    return sigma
 
 # Class to provide compact input of instrument data and metadata
 class Data:
