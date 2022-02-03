@@ -2,6 +2,7 @@ import sep
 import numpy as np
 import scarlet
 from scarlet.wavelet import Starlet
+from scipy.stats import median_absolute_deviation as mad
 
 def mad_wavelet(image):
     """ image: Median absolute deviation of the first wavelet scale.
@@ -13,10 +14,15 @@ def mad_wavelet(image):
     Returns
     -------
     mad: array
-        median absolute deviation each image in the cube
+        median absolute deviation for each image in the cube
     """
-    sigma = mad(Starlet(image, lvl = 2).coefficients[:,0,...], axis = (-2,-1))
-    return sigma
+    if len(np.shape(image))==2:
+        image = image[None, :, :]
+    sigma = []
+    for i in image:
+        sigma.append(mad(Starlet.from_image(i, scales=2).coefficients[:, 0, ...], axis=(-2, -1)))
+    return np.array(sigma)
+
 
 # Class to provide compact input of instrument data and metadata
 class Data:
@@ -108,7 +114,7 @@ def makeCatalog(datas, lvl=3, thresh=3, wave=True):
     # Rescaling to HR image flux
     # detect_image *= np.sum(data_hr.images)
     # Wavelet transform
-    wave_detect = scarlet.Starlet(detect_image, direct=False).coefficients[0]
+    wave_detect = scarlet.Starlet.from_image(detect_image).coefficients
 
     if wave:
         # Creates detection from the first 3 wavelet levels
